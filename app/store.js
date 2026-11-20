@@ -1,76 +1,88 @@
-// Progress saved in the browser: earned trophies, counters, spoiler setting,
-// revealed story trophies, and the selected trophy. Export and import as JSON.
-const KEY = 'leonida-nights-v1';
+// LEONIDA NIGHTS — the progress store: earned trophies, per-trophy counters and
+// the spoiler setting, saved in localStorage and exportable/importable as JSON.
+// Nothing here touches the network; the file the user exports is built in the
+// browser and downloaded locally.
 
-function readState() {
+export const STORE_KEY = 'leonida-nights-v1';
+
+function blankState() {
+  return { earned: [], counters: {}, spoiler: true, version: 1 };
+}
+
+function cleanState(raw) {
+  const state = blankState();
+  if (!raw || typeof raw !== 'object') return state;
+  if (Array.isArray(raw.earned)) state.earned = raw.earned.filter((n) => typeof n === 'string');
+  if (raw.counters && typeof raw.counters === 'object') {
+    for (const [key, value] of Object.entries(raw.counters)) {
+      const n = Number(value);
+      if (Number.isFinite(n) && n >= 0) state.counters[key] = Math.floor(n);
+    }
+  }
+  if (typeof raw.spoiler === 'boolean') state.spoiler = raw.spoiler;
+  return state;
+}
+
+export function loadStore() {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '{}');
+    return cleanState(JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null'));
   } catch {
-    return {};
+    return blankState();
   }
 }
 
-function writeState(state) {
-  localStorage.setItem(KEY, JSON.stringify(state));
+export function saveStore(state) {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
 }
 
-export const store = {
-  earned: new Set(readState().earned ?? []),
-  counters: readState().counters ?? {},
-  spoiler: readState().spoiler ?? true,
-  revealed: new Set(readState().revealed ?? []),
-  selected: readState().selected ?? 28,
+export function isEarned(state, trophy) {
+  return state.earned.includes(trophy.name);
+}
 
-  save() {
-    writeState({
-      earned: [...this.earned],
-      counters: this.counters,
-      spoiler: this.spoiler,
-      revealed: [...this.revealed],
-      selected: this.selected,
-    });
-  },
+export function toggleEarned(state, trophy) {
+  const at = state.earned.indexOf(trophy.name);
+  if (at === -1) state.earned.push(trophy.name);
+  else state.earned.splice(at, 1);
+  saveStore(state);
+  return state;
+}
 
-  toggleEarned(id) {
-    if (this.earned.has(id)) this.earned.delete(id);
-    else this.earned.add(id);
-    this.save();
-  },
+export function counterValue(state, trophy) {
+  return state.counters[String(trophy.id)] ?? 0;
+}
 
-  setCounter(id, value, max) {
-    const clamped = Math.max(0, Math.min(max, value));
-    this.counters[id] = clamped;
-    this.save();
-    return clamped;
-  },
+export function setCounter(state, trophy, value) {
+  const max = trophy.count ?? 0;
+  const clamped = Math.max(0, max > 0 ? Math.min(max, value) : value);
+  state.counters[String(trophy.id)] = clamped;
+  saveStore(state);
+  return clamped;
+}
 
-  counter(id) {
-    return this.counters[id] ?? 0;
-  },
+export function exportState(state) {
+  return JSON.stringify({ ...state, exportedAt: new Date().toISOString() }, null, 2);
+}
 
-  exportJson() {
-    return JSON.stringify(
-      { app: 'leonida-nights', earned: [...this.earned], counters: this.counters },
-      null,
-      2,
-    );
-  },
+export function importState(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error('that file is not valid JSON');
+  }
+  const state = cleanState(parsed);
+  saveStore(state);
+  return state;
+}
 
-  // Import a file exported by this app (or a hand-made one with the same shape).
-  importJson(text) {
-    const data = JSON.parse(text);
-    if (!Array.isArray(data.earned)) throw new Error('no earned list in file');
-    this.earned = new Set(data.earned.filter((id) => Number.isInteger(id)));
-    if (data.counters && typeof data.counters === 'object') this.counters = data.counters;
-    this.save();
-  },
-};
-
-export function downloadProgress() {
-  const blob = new Blob([store.exportJson()], { type: 'application/json' });
+export function downloadFile(filename, text) {
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'leonida-nights-progress.json';
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

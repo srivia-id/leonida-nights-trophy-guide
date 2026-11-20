@@ -1,58 +1,50 @@
-// The roadmap view: the seven stages S1-S7, each with its trophies and its
-// progress, and the missables view: the watch list plus the hidden trophies.
-import { store } from './store.js';
-import { STAGES, WATCH, stageTrophies } from './plan.js';
-import { isMasked } from './views.js';
+// LEONIDA NIGHTS — the platinum roadmap view: seven stages, S1–S7, each with
+// its trophies, its hours and its earned count, built from the official
+// descriptions (which chapters and missions, which collectibles and counts).
+
+import { STAGES, gradeLetter } from './data.js';
+import { isEarned } from './store.js';
+import { stageProgress } from './plan.js';
 
 function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;
-  return n;
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
-export function renderRoadmap(trophies) {
-  const host = document.getElementById('roadmapStages');
-  host.replaceChildren();
+function stageCard(stage, trophies, state, onSelect) {
+  const card = el('section', 'stage-card');
+  const head = el('div', 'stage-head');
+  const title = el('h3', null, `${stage.id} · ${stage.title}`);
+  const progress = stageProgress(trophies, state, stage.id);
+  const meta = el('p', 'stage-meta', `${stage.hours} · ${progress.earned}/${progress.total} earned`);
+  head.append(title, meta);
+  card.append(head, el('p', 'stage-blurb', stage.blurb));
+  const list = el('ul', 'stage-trophies');
+  for (const trophy of trophies.filter((t) => t.stage === stage.id)) {
+    const item = el('li', 'stage-trophy' + (isEarned(state, trophy) ? ' earned' : ''));
+    const box = el('span', 'tick', isEarned(state, trophy) ? '✓' : '○');
+    const name = el('span', 't-name', trophy.name);
+    const badge = el('span', `grade grade-${trophy.grade}`, gradeLetter(trophy.grade));
+    item.append(box, name, badge);
+    if (trophy.missable) item.append(el('span', 'flag flag-missable', 'POSSIBLY MISSABLE'));
+    item.addEventListener('click', () => onSelect(trophy));
+    list.append(item);
+  }
+  card.append(list);
+  return card;
+}
+
+export function renderRoadmap(container, trophies, state, onSelect) {
+  container.replaceChildren();
+  const intro = el(
+    'p',
+    'view-intro',
+    'One playthrough, about 200 hours at the guides’ pace: five story chapters, then the 100% checklist, then cleanup. Click any trophy to open its guide.',
+  );
+  container.append(intro);
   for (const stage of STAGES) {
-    const list = stageTrophies(trophies, stage.code);
-    const earned = list.filter((t) => store.earned.has(t.id)).length;
-    const card = el('div', 'stage');
-    const h = el('h3');
-    h.append(el('span', 'stage-code', stage.code + ' — '), document.createTextNode(stage.title));
-    card.append(h);
-    card.append(el('p', null, stage.text));
-    card.append(el('div', 'stage-progress', `${earned} / ${list.length} earned in this stage`));
-    const ul = el('ul');
-    for (const t of list) {
-      const li = el('li', store.earned.has(t.id) ? 'earned' : null, isMasked(t) ? 'Story trophy — hidden on PlayStation until earned' : `${t.name} (${t.grade})`);
-      ul.append(li);
-    }
-    card.append(ul);
-    host.append(card);
-  }
-}
-
-export function renderMissables(trophies) {
-  const host = document.getElementById('watchList');
-  host.replaceChildren();
-  for (const w of WATCH) {
-    const t = trophies.find((x) => x.id === w.id);
-    if (!t) continue;
-    const card = el('div', 'watch-card' + (w.danger ? ' danger' : ''));
-    card.append(el('div', 'status', w.status));
-    card.append(el('h3', null, isMasked(t) ? 'Story trophy — hidden' : t.name));
-    card.append(el('p', null, '“' + t.description + '”'));
-    card.append(el('p', null, w.reason));
-    if (t.missable) {
-      card.append(el('p', null, 'Sources disagree on the count: PowerPyx lists 18 meditation spots, other guides list 15. This guide targets 18 and says so in the open.'));
-    }
-    host.append(card);
-  }
-  const hiddenHost = document.getElementById('hiddenList');
-  hiddenHost.replaceChildren();
-  for (const t of trophies.filter((x) => x.hidden)) {
-    const cell = el('div', 'hidden-cell' + (store.earned.has(t.id) ? ' earned' : ''), store.earned.has(t.id) || !isMasked(t) ? t.name : 'Hidden trophy — earn to reveal');
-    hiddenHost.append(cell);
+    container.append(stageCard(stage, trophies, state, onSelect));
   }
 }
