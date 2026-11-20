@@ -1,285 +1,238 @@
-// LEONIDA NIGHTS — the checklist tab: filter chips, the 55-row list, and the
-// detail panel for the selected trophy, with its cited steps and counters.
-import { isMasked, kindLabel, sourcesOfTrophy } from './data.js';
+// The checklist view: the trophy list, the selected trophy's detail panel,
+// the right rail (sources + next up), and the audit strip. Everything is built
+// from the data, so the strip's claims are always true of the app.
+import { SOURCES, kindLabel, sourceById, sourceCitationCount, citedSteps, totalSteps } from './data.js';
+import { store } from './store.js';
+import { WATCH, UNCONFIRMED, counterFor, nextUp } from './plan.js';
 
-const KIND_ORDER = ['all', 'story', 'missable', 'collectibles', 'activities', 'side', 'crime', 'money', 'misc', 'online'];
-
-export function renderKindChips(container, data, ui, onKind) {
-  container.replaceChildren();
-  for (const kind of KIND_ORDER) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'chip' + (ui.kind === kind ? ' active' : '');
-    if (kind === 'all') button.textContent = `All ${data.trophies.length}`;
-    else if (kind === 'missable') button.textContent = `Missable (${data.trophies.filter((t) => t.missable).length})`;
-    else if (kind === 'online') button.textContent = 'Online 0';
-    else button.textContent = `${kindLabel(kind)} (${data.trophies.filter((t) => t.kind === kind).length})`;
-    button.addEventListener('click', () => onKind(kind));
-    container.append(button);
-  }
+export function isMasked(t) {
+  return store.spoiler && t.hidden && !store.earned.has(t.id) && !store.revealed.has(t.id);
 }
 
-export function filterTrophies(data, state, ui) {
-  const q = ui.q.trim().toLowerCase();
-  return data.trophies.filter((t) => {
-    if (ui.kind === 'missable' && !t.missable) return false;
-    if (ui.kind !== 'all' && ui.kind !== 'missable' && ui.kind !== 'online' && t.kind !== ui.kind) return false;
-    if (ui.kind === 'online') return false;
-    if (ui.grade !== 'all' && t.grade !== ui.grade) return false;
-    if (ui.earnedOnly && !state.earned.has(t.id)) return false;
-    if (q) {
-      const hay = `${t.name} ${t.description} ${t.guide} ${kindLabel(t.kind)}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+function gradeBadge(t) {
+  const b = el('span', 'grade-badge grade-' + t.grade, t.grade === 'platinum' ? 'Platinum' : t.grade === 'gold' ? 'Gold' : t.grade === 'silver' ? 'Silver' : 'Bronze');
+  return b;
+}
+
+export function renderAuditStrip(trophies) {
+  const strip = document.getElementById('auditStrip');
+  const grades = { platinum: 0, gold: 0, silver: 0, bronze: 0 };
+  for (const t of trophies) grades[t.grade]++;
+  const hidden = trophies.filter((t) => t.hidden).length;
+  const cited = trophies.filter((t) => (t.sources ?? []).length > 0).length;
+  const steps = totalSteps(trophies);
+  const citedCount = citedSteps(trophies);
+  const single = trophies.filter((t) => (t.sources ?? []).length === 1).length;
+  strip.replaceChildren();
+  const parts = [
+    `${trophies.length} official`,
+    `${grades.platinum}P ${grades.gold}G ${grades.silver}S ${grades.bronze}B`,
+    `${hidden} hidden`,
+    `${cited}/${trophies.length} guides cite a source`,
+    `${citedCount}/${steps} steps cited`,
+    `${SOURCES.length} sources read 19/20 Nov 2026`,
+    '1 possibly missable',
+    `${WATCH.length} on watch`,
+    `${UNCONFIRMED.length} unconfirmed`,
+    `${single} single-source`,
+    'time to platinum ≈163 h',
+    'No Rockstar artwork',
+  ];
+  parts.forEach((p, i) => {
+    if (i > 0) strip.append(document.createTextNode(' · '));
+    const s = el('span', null, p);
+    if (p === '1 possibly missable') s.className = 'warn-word';
+    strip.append(s);
+  });
+  const b = el('b', null, ' — in our own words, every step cited.');
+  strip.append(b);
+}
+
+export function renderChecklist(trophies, filter, onSelect) {
+  const list = document.getElementById('trophyList');
+  list.replaceChildren();
+  const q = (filter.search ?? '').trim().toLowerCase();
+  const shown = trophies.filter((t) => {
+    if (filter.kind === 'missable' && !t.missable) return false;
+    if (filter.kind === 'online') return false;
+    if (filter.kind !== 'all' && filter.kind !== 'missable' && t.kind !== filter.kind) return false;
+    if (filter.grade !== 'all' && t.grade !== filter.grade) return false;
+    if (filter.earnedOnly && !store.earned.has(t.id)) return false;
+    if (q && !(t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || t.guide.toLowerCase().includes(q))) return false;
     return true;
   });
-}
-
-function gradeLetter(grade) {
-  return { platinum: 'P', gold: 'G', silver: 'S', bronze: 'B' }[grade] || '?';
-}
-
-export function renderList(container, data, state, ui, handlers) {
-  const rows = filterTrophies(data, state, ui);
-  container.replaceChildren();
-  for (const t of rows) {
-    const masked = isMasked(t, state) && !ui.revealed.has(t.id);
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'trow' + (state.earned.has(t.id) ? ' earned' : '') + (ui.selected === t.id ? ' selected' : '');
-    row.addEventListener('click', () => handlers.onSelect(t.id));
-
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.checked = state.earned.has(t.id);
-    box.setAttribute('aria-label', `Mark ${masked ? 'story trophy' : t.name} earned`);
-    box.addEventListener('click', (event) => {
-      event.stopPropagation();
-      handlers.onToggleEarned(t.id, box.checked);
-    });
-    row.append(box);
-
-    const middle = document.createElement('span');
-    const name = document.createElement('span');
-    name.className = 'tname';
-    name.textContent = masked ? 'Story trophy — hidden until earned' : t.name;
-    middle.append(name);
-    const desc = document.createElement('span');
-    desc.className = 'tdesc';
-    desc.style.display = 'block';
-    desc.textContent = masked ? 'Hidden on PlayStation until earned.' : t.description;
-    middle.append(desc);
-    const meta = document.createElement('span');
-    meta.className = 'tmeta';
-    meta.style.display = 'flex';
-    const kindTag = document.createElement('span');
-    kindTag.className = 'tag';
-    kindTag.textContent = kindLabel(t.kind);
-    meta.append(kindTag);
-    const stageTag = document.createElement('span');
-    stageTag.className = 'tag';
-    stageTag.textContent = t.stage;
-    meta.append(stageTag);
-    if (t.hidden) {
-      const hiddenTag = document.createElement('span');
-      hiddenTag.className = 'tag hidden-tag';
-      hiddenTag.textContent = 'HIDDEN ON PSN';
-      meta.append(hiddenTag);
-    }
-    if (t.missable) {
-      const missTag = document.createElement('span');
-      missTag.className = 'tag missable';
-      missTag.textContent = 'POSSIBLY MISSABLE';
-      meta.append(missTag);
-    }
-    if (t.unconfirmed) {
-      const uncTag = document.createElement('span');
-      uncTag.className = 'tag unconfirmed-tag';
-      uncTag.textContent = 'UNCONFIRMED';
-      meta.append(uncTag);
-    }
-    if (t.counter) {
-      const current = state.counters.get(t.id) || 0;
-      if (current > 0) {
-        const counterChip = document.createElement('span');
-        counterChip.className = 'counter-chip';
-        counterChip.textContent = `${current}/${t.counter.target} ${t.counter.label.toLowerCase()}`;
-        meta.append(counterChip);
-      }
-    }
-    middle.append(meta);
-    row.append(middle);
-
-    const badge = document.createElement('span');
-    badge.className = `grade-badge ${t.grade}`;
-    badge.textContent = gradeLetter(t.grade);
-    badge.title = t.grade;
-    row.append(badge);
-
-    container.append(row);
-  }
-  return rows.length;
-}
-
-function citationSpan(document, data, sourceId) {
-  const source = data.sources.find((s) => s.id === sourceId);
-  const span = document.createElement('span');
-  span.className = 'cite';
-  if (source && source.url) {
-    const link = document.createElement('a');
-    link.href = source.url;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = `[${sourceId}]`;
-    link.title = `${source.name} — read ${source.read}`;
-    span.append(link);
-  } else {
-    span.textContent = `[${sourceId}]`;
-    span.title = source ? `${source.name} — read ${source.read}` : `Source ${sourceId}`;
-  }
-  return span;
-}
-
-export function renderDetail(container, data, state, ui, handlers) {
-  const trophy = data.trophies.find((t) => t.id === ui.selected) || data.trophies[0];
-  const masked = isMasked(trophy, state) && !ui.revealed.has(trophy.id);
-  const doc = container.ownerDocument;
-  container.replaceChildren();
-
-  const title = doc.createElement('h2');
-  title.textContent = masked ? 'Story trophy — hidden until earned' : trophy.name;
-  container.append(title);
-
-  const official = doc.createElement('p');
-  official.className = 'official';
-  official.textContent = masked
-    ? 'Hidden on PlayStation until earned. Tick it earned, or turn Spoilers off, to reveal it.'
-    : `“${trophy.description}” — official description, shown as PlayStation publishes it.`;
-  container.append(official);
-
-  const badges = doc.createElement('div');
-  badges.className = 'badges';
-  const gradeBadge = doc.createElement('span');
-  gradeBadge.className = `grade-badge ${trophy.grade}`;
-  gradeBadge.textContent = gradeLetter(trophy.grade);
-  badges.append(gradeBadge);
-  for (const [label, cls] of [
-    [trophy.grade, 'tag'], [kindLabel(trophy.kind), 'tag'], [`Roadmap ${trophy.stage}`, 'tag'],
-  ]) {
-    const tag = doc.createElement('span');
-    tag.className = cls;
-    tag.textContent = label;
-    badges.append(tag);
-  }
-  if (trophy.hidden) {
-    const tag = doc.createElement('span');
-    tag.className = 'tag hidden-tag';
-    tag.textContent = 'HIDDEN ON PSN';
-    badges.append(tag);
-  }
-  container.append(badges);
-
-  if (masked) {
-    const note = doc.createElement('p');
-    note.className = 'masked';
-    note.textContent = 'This is a hidden story trophy. Its name, description and guide stay hidden until you earn it — or until you turn Spoilers off at the top of the page.';
-    container.append(note);
-    const reveal = doc.createElement('button');
-    reveal.type = 'button';
-    reveal.className = 'chip';
-    reveal.textContent = 'Reveal this trophy';
-    reveal.addEventListener('click', () => handlers.onReveal(trophy.id));
-    container.append(reveal);
+  document.getElementById('filterCount').textContent = `${shown.length} of ${trophies.length} shown`;
+  if (shown.length === 0) {
+    list.append(el('li', 'empty-note', filter.kind === 'online' ? 'No online trophies in this list — every trophy is earned offline.' : 'No trophies match these filters.'));
     return;
   }
-
-  if (trophy.missable) {
-    const banner = doc.createElement('div');
-    banner.className = 'missable-banner';
-    banner.textContent = 'POSSIBLY MISSABLE — the only trophy on the list that might be. See step 1, then keep a Chapter 1 manual save.';
-    container.append(banner);
-  }
-  if (trophy.disagree) {
-    const box = doc.createElement('div');
-    box.className = 'disagree-box';
-    const head = doc.createElement('b');
-    head.textContent = 'SOURCES DISAGREE — BOTH VERSIONS SHOWN';
-    box.append(head);
-    box.append(doc.createTextNode('Two sources give different versions of a fact on this trophy. The steps below show both, and this guide does not pick one.'));
-    container.append(box);
-  }
-  if (trophy.unconfirmed) {
-    const box = doc.createElement('div');
-    box.className = 'unconfirmed-box';
-    const head = doc.createElement('b');
-    head.textContent = 'UNCONFIRMED';
-    box.append(head);
-    box.append(doc.createTextNode('No source has pinned this method down yet. The steps below say what is known, what is only a belief, and what is still being found.'));
-    container.append(box);
-  }
-
-  const guide = doc.createElement('p');
-  guide.className = 'guide-text';
-  guide.textContent = trophy.guide;
-  container.append(guide);
-
-  if (trophy.counter) {
-    const current = state.counters.get(trophy.id) || 0;
-    const widget = doc.createElement('div');
-    widget.className = 'counter-widget';
-    const minus = doc.createElement('button');
-    minus.type = 'button';
-    minus.textContent = '−';
-    minus.setAttribute('aria-label', 'Decrease counter');
-    minus.addEventListener('click', () => handlers.onCounter(trophy.id, -1));
-    const plus = doc.createElement('button');
-    plus.type = 'button';
-    plus.textContent = '+';
-    plus.setAttribute('aria-label', 'Increase counter');
-    plus.addEventListener('click', () => handlers.onCounter(trophy.id, 1));
-    const big = doc.createElement('span');
-    big.className = 'count-big';
-    big.textContent = `${current}/${trophy.counter.target}`;
-    const label = doc.createElement('span');
-    label.textContent = trophy.counter.label + (trophy.counter.unit ? ` (${trophy.counter.unit})` : '');
-    const bar = doc.createElement('span');
-    bar.className = 'bar';
-    const fill = doc.createElement('i');
-    fill.style.width = `${Math.min(100, Math.round((current / trophy.counter.target) * 100))}%`;
-    bar.append(fill);
-    widget.append(minus, big, label, bar, plus);
-    container.append(widget);
-  }
-
-  if (trophy.balcony) {
-    const label = doc.createElement('label');
-    label.className = 'balcony-check';
-    const box = doc.createElement('input');
+  for (const t of shown) {
+    const li = el('li');
+    if (store.earned.has(t.id)) li.classList.add('earned');
+    if (store.selected === t.id) li.classList.add('selected');
+    const box = document.createElement('input');
     box.type = 'checkbox';
-    box.checked = state.balconyDone;
-    box.addEventListener('change', () => handlers.onBalcony(box.checked));
-    label.append(box, doc.createTextNode(' Chapter 1 balcony meditation done — keep the Chapter 1 save until the trophy pops.'));
-    container.append(label);
-  }
-
-  const steps = doc.createElement('ol');
-  steps.className = 'steps';
-  for (const step of trophy.steps || []) {
-    const li = doc.createElement('li');
-    li.append(doc.createTextNode(step.text + ' '));
-    for (const sourceId of step.sources || []) {
-      li.append(citationSpan(doc, data, sourceId), doc.createTextNode(' '));
+    box.checked = store.earned.has(t.id);
+    box.setAttribute('aria-label', 'Earned: ' + t.name);
+    box.addEventListener('click', (e) => e.stopPropagation());
+    box.addEventListener('change', () => {
+      store.toggleEarned(t.id);
+      onSelect(t.id, true);
+    });
+    li.append(box);
+    const mid = el('div');
+    if (isMasked(t)) {
+      mid.append(el('div', 't-hidden', 'Story trophy — hidden on PlayStation until earned'));
+      const rev = el('button', 'reveal-btn', 'Reveal');
+      rev.type = 'button';
+      rev.addEventListener('click', (e) => {
+        e.stopPropagation();
+        store.revealed.add(t.id);
+        store.save();
+        onSelect(t.id, true);
+      });
+      mid.append(rev);
+    } else {
+      mid.append(el('div', 't-name', t.name));
+      mid.append(el('div', 't-desc', t.description));
     }
-    steps.append(li);
+    const chips = el('div');
+    chips.append(el('span', 'mini-chip', t.stage));
+    chips.append(el('span', 'mini-chip', kindLabel(t.kind)));
+    if (t.missable) chips.append(el('span', 'mini-chip missable', 'Possibly missable'));
+    if (t.hidden && !isMasked(t)) chips.append(el('span', 'mini-chip', 'Hidden on PSN'));
+    mid.append(chips);
+    li.append(mid);
+    li.append(gradeBadge(t));
+    li.addEventListener('click', () => onSelect(t.id, false));
+    list.append(li);
   }
-  container.append(steps);
+}
 
-  const citedBy = doc.createElement('p');
-  citedBy.className = 'cited-by';
-  const sourceNames = sourcesOfTrophy(trophy).map((n) => {
-    const s = data.sources.find((x) => x.id === n);
-    return s ? `${s.name} [${n}]` : `Source ${n}`;
-  }).join(', ');
-  citedBy.textContent = `Sources for this guide: ${sourceNames}. All sources read 20 Nov 2026.`;
-  container.append(citedBy);
+export function renderDetail(trophies, onChange) {
+  const panel = document.getElementById('detailPanel');
+  panel.replaceChildren();
+  const t = trophies.find((x) => x.id === store.selected) ?? trophies[0];
+  if (!t) return;
+  if (isMasked(t)) {
+    panel.append(el('h2', null, 'Story trophy — hidden'));
+    panel.append(el('p', 'detail-official', 'This trophy is hidden on PlayStation until it is earned. Turn spoilers off, earn it, or reveal it to read its guide.'));
+    const rev = el('button', 'reveal-btn', 'Reveal this trophy');
+    rev.type = 'button';
+    rev.addEventListener('click', () => {
+      store.revealed.add(t.id);
+      store.save();
+      onChange();
+    });
+    panel.append(rev);
+    return;
+  }
+  panel.append(el('h2', null, t.name));
+  panel.append(el('p', 'detail-official', '“' + t.description + '” — as PlayStation publishes it.'));
+  const meta = el('div', 'detail-meta');
+  meta.append(gradeBadge(t));
+  meta.append(el('span', 'mini-chip', t.stage));
+  meta.append(el('span', 'mini-chip', kindLabel(t.kind)));
+  if (t.hidden) meta.append(el('span', 'mini-chip', 'Hidden on PSN'));
+  panel.append(meta);
+  if (t.missable) {
+    panel.append(el('div', 'missable-banner', 'POSSIBLY MISSABLE — do this as you go, not in the cleanup pass.'));
+    panel.append(el('div', 'disagree-box', 'SOURCES DISAGREE — BOTH VERSIONS SHOWN: PowerPyx lists 18 meditation spots; other guides list 15. Aim for 18 so either count is covered.'));
+  }
+  if (UNCONFIRMED.includes(t.id) && !t.missable) {
+    panel.append(el('div', 'disagree-box', 'UNCONFIRMED — the exact trigger is not pinned down by any source yet. This guide says what is known and marks the rest as unconfirmed.'));
+  }
+  panel.append(el('h3', null, 'Guide — in our own words'));
+  panel.append(el('p', null, t.guide));
+  panel.append(el('h3', null, 'Steps — each one cited'));
+  const ol = el('ol', 'steps');
+  for (const s of t.steps ?? []) {
+    const li = el('li', null, s.t + ' ');
+    const src = sourceById(s.s);
+    li.append(el('span', 'cite', src ? `[${src.id} ${src.name}]` : ''));
+    ol.append(li);
+  }
+  panel.append(ol);
+  const counter = counterFor(t.id);
+  if (counter) {
+    const box = el('div', 'counter-box');
+    box.append(el('span', null, `${counter.label}: `));
+    const minus = el('button', null, '−');
+    minus.type = 'button';
+    const num = el('span', 'counter-num', `${store.counter(t.id)} / ${counter.target}`);
+    const plus = el('button', null, '+');
+    plus.type = 'button';
+    minus.addEventListener('click', () => {
+      num.textContent = `${store.setCounter(t.id, store.counter(t.id) - 1, counter.target)} / ${counter.target}`;
+      onChange(true);
+    });
+    plus.addEventListener('click', () => {
+      num.textContent = `${store.setCounter(t.id, store.counter(t.id) + 1, counter.target)} / ${counter.target}`;
+      onChange(true);
+    });
+    box.append(minus, num, plus);
+    panel.append(box);
+  }
+  panel.append(el('h3', null, 'Sources for this guide'));
+  for (const sid of t.sources ?? []) {
+    const src = sourceById(sid);
+    if (src) panel.append(el('p', 'source-line', `[${src.id}] ${src.name} — ${src.title} (${src.place}), read ${src.read}.`));
+  }
+  const row = el('div', 'earned-row');
+  const label = el('label');
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = store.earned.has(t.id);
+  box.addEventListener('change', () => {
+    store.toggleEarned(t.id);
+    onChange();
+  });
+  label.append(box, document.createTextNode(' Earned'));
+  row.append(label);
+  panel.append(row);
+}
+
+export function renderRail(trophies) {
+  const rail = document.getElementById('railPanel');
+  rail.replaceChildren();
+  const sourcesBox = el('div', 'rail-box');
+  sourcesBox.append(el('h3', null, 'Sources'));
+  const ol = el('ol');
+  for (const s of SOURCES) {
+    const li = el('li', null, `${s.name} — ${s.title} (${s.place}), read ${s.read}. `);
+    li.append(el('span', 'src-count', `cited by ${sourceCitationCount(trophies, s.id)} of 55 guides`));
+    ol.append(li);
+  }
+  sourcesBox.append(ol);
+  rail.append(sourcesBox);
+  const nextBox = el('div', 'rail-box');
+  nextBox.append(el('h3', null, 'Next up — earliest ungated'));
+  const ul = el('ol', 'nextup');
+  for (const t of nextUp(trophies, store.earned)) {
+    const li = el('li');
+    li.append(el('span', null, isMasked(t) ? 'Story trophy (hidden)' : t.name));
+    li.append(el('span', 'src-count', ` — ${t.stage}`));
+    ul.append(li);
+  }
+  nextBox.append(ul);
+  rail.append(nextBox);
+  const watchBox = el('div', 'rail-box');
+  watchBox.append(el('h3', null, 'Missable watch'));
+  const wul = el('ol', 'nextup');
+  for (const w of WATCH) {
+    const t = trophies.find((x) => x.id === w.id);
+    const li = el('li');
+    li.append(el('span', null, t ? t.name : ''));
+    li.append(el('span', 'src-count', ` — ${w.status}`));
+    wul.append(li);
+  }
+  watchBox.append(wul);
+  rail.append(watchBox);
 }

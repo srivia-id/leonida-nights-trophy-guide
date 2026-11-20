@@ -9,92 +9,108 @@
 <body>
 <header class="masthead">
   <div class="brand">
-    <h1>LEONIDA NIGHTS</h1>
-    <p class="sub">GTA VI &middot; PlayStation 5 &middot; Trophy Guide &amp; Tracker &middot; 55 trophies &middot; offline, in your browser</p>
+    <div class="brand-name">LEONIDA NIGHTS</div>
+    <div class="brand-sub">GTA VI &middot; PlayStation 5 &middot; 55 trophies &middot; guide &amp; tracker</div>
   </div>
   <div class="progress-block">
-    <div class="big-count"><span id="earned-count">0</span><span class="of">/55 earned</span></div>
-    <div class="grade-pills" id="grade-pills"></div>
-    <div class="save-actions">
-      <button id="export-btn" type="button">Export progress</button>
-      <label class="import-label">Import progress <input id="import-file" type="file" accept="application/json,.json"></label>
-      <label class="spoiler-toggle"><input id="spoiler-toggle" type="checkbox" checked> Spoilers off</label>
-    </div>
-    <p class="saved-note">Saved in this browser &middot; no account, no network</p>
+    <div class="progress-big"><span id="progressCount">0</span><span class="progress-of"> / 55 earned</span></div>
+    <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+    <div class="grade-counts" id="gradeCounts">P 0 &middot; G 0 &middot; S 0 &middot; B 0</div>
+  </div>
+  <div class="header-actions">
+    <button id="exportBtn" type="button">Export progress</button>
+    <label class="import-label">Import progress <input id="importFile" type="file" accept="application/json"></label>
+    <label class="spoiler-toggle"><input id="spoilerToggle" type="checkbox" checked> Spoilers hidden</label>
+    <div class="saved-note">Saved in this browser</div>
   </div>
 </header>
-<div class="audit" id="audit-strip" aria-label="Audit strip">Loading the guide&hellip;</div>
-<nav class="tabs" aria-label="Guide sections">
-  <button type="button" data-tab="checklist" class="active">Checklist</button>
-  <button type="button" data-tab="roadmap">Roadmap</button>
-  <button type="button" data-tab="missables">Missables &amp; Watch</button>
-  <button type="button" data-tab="sources">Sources</button>
+
+<div class="audit-strip" id="auditStrip">Loading the official list&hellip;</div>
+
+<nav class="tabs" id="tabs">
+  <a href="#/checklist" data-tab="checklist">Checklist</a>
+  <a href="#/roadmap" data-tab="roadmap">Roadmap S1&ndash;S7</a>
+  <a href="#/missables" data-tab="missables">Missables &amp; watch</a>
+  <a href="#/sources" data-tab="sources">Sources</a>
 </nav>
 
-<main id="tab-checklist" class="tab-page">
-  <div class="filter-bar">
-    <input id="search" type="search" placeholder="Search a trophy or its guide&hellip;" aria-label="Search trophies">
-    <div class="chips" id="kind-chips" role="group" aria-label="Filter by kind"></div>
-    <label class="grade-filter">Grade
-      <select id="grade-select">
-        <option value="all">All grades</option>
-        <option value="platinum">Platinum</option>
-        <option value="gold">Gold</option>
-        <option value="silver">Silver</option>
-        <option value="bronze">Bronze</option>
-      </select>
-    </label>
-    <label class="earned-only"><input id="earned-only" type="checkbox"> Earned only</label>
-    <span class="list-count" id="list-count"></span>
-  </div>
-  <div class="checklist-grid">
-    <section class="trophy-list" id="trophy-list" aria-label="Trophy checklist"></section>
-    <section class="detail" id="detail" aria-label="Selected trophy guide"></section>
-    <aside class="rail" aria-label="Planner and sources">
-      <section class="rail-card" id="next-up"></section>
-      <section class="rail-card" id="rail-watch"></section>
-      <section class="rail-card" id="rail-sources"></section>
-    </aside>
-  </div>
+<main>
+  <section id="view-checklist" class="view">
+    <div class="filters" id="filters">
+      <div class="kind-chips" id="kindChips"></div>
+      <div class="filter-row">
+        <label>Grade
+          <select id="gradeFilter">
+            <option value="all">All grades</option>
+            <option value="platinum">Platinum</option>
+            <option value="gold">Gold</option>
+            <option value="silver">Silver</option>
+            <option value="bronze">Bronze</option>
+          </select>
+        </label>
+        <label class="search-label">Search <input id="searchInput" type="search" placeholder="trophy name or word&hellip;"></label>
+        <label class="earned-only"><input id="earnedOnly" type="checkbox"> Earned only</label>
+        <span class="filter-count" id="filterCount"></span>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="list-col">
+        <div class="col-title">Checklist</div>
+        <ol class="trophy-list" id="trophyList"></ol>
+      </div>
+      <div class="detail-col" id="detailPanel"></div>
+      <div class="rail-col" id="railPanel"></div>
+    </div>
+  </section>
+
+  <section id="view-roadmap" class="view" hidden>
+    <div class="view-intro">
+      <h2>Roadmap to the platinum</h2>
+      <p>Seven stages, in the order to play them. Story first, strangers and side stories next, then the long grinds last — when the whole map is open and fast travel is yours. Estimated time to platinum: about 163 hours.</p>
+    </div>
+    <div id="roadmapStages" class="stages"></div>
+  </section>
+
+  <section id="view-missables" class="view" hidden>
+    <div class="view-intro">
+      <h2>Missables &amp; watch list</h2>
+      <p>Only one trophy is possibly missable. The other five on this list are not missable, but they are easy to leave too late — each one says why it is being watched.</p>
+    </div>
+    <div id="watchList" class="watch"></div>
+    <div class="view-intro">
+      <h2>Hidden on PlayStation until earned</h2>
+      <p>28 of the 55 trophies are hidden on PSN. With spoilers on, their names and descriptions stay covered until you earn them — or tap Reveal on one.</p>
+    </div>
+    <div id="hiddenList" class="hidden-grid"></div>
+  </section>
+
+  <section id="view-sources" class="view" hidden>
+    <div class="view-intro">
+      <h2>Source matrix</h2>
+      <p>Every guide in this entry is written in our own words, and every step cites where its facts come from. A source is cited, never copied. Click a source to see the trophies it supports; click a trophy to open its guide.</p>
+    </div>
+    <div id="sourceMatrix" class="matrix"></div>
+    <div class="view-intro">
+      <h2>Progress counters</h2>
+      <p>Counts the game itself tracks. Tap + or &minus; in a trophy&rsquo;s detail panel to keep them honest.</p>
+    </div>
+    <div id="countersPanel" class="counters"></div>
+    <div class="view-intro">
+      <h2>Your progress, in and out</h2>
+      <p>Progress lives in this browser&rsquo;s local storage. Export it to a file before clearing browser data, and import it back any time.</p>
+    </div>
+    <div class="export-box">
+      <button id="exportBtn2" type="button">Export progress (.json)</button>
+      <label class="import-label">Import progress <input id="importFile2" type="file" accept="application/json"></label>
+      <span id="exportNote" class="export-note"></span>
+    </div>
+  </section>
 </main>
 
-<main id="tab-roadmap" class="tab-page" hidden>
-  <div class="page-intro">
-    <h2>Road to the platinum</h2>
-    <p>Seven stages, in the order to play them. Stage hours are this guide&rsquo;s allocation of PowerPyx&rsquo;s roughly 200-hour platinum estimate (60&ndash;80 hours of story, about 100 of checklist, 10&ndash;20 of cleanup). Every trophy sits in exactly one stage.</p>
-    <p class="estimate-line" id="estimate-line"></p>
-  </div>
-  <div class="roadmap" id="roadmap"></div>
-</main>
-
-<main id="tab-missables" class="tab-page" hidden>
-  <div class="page-intro">
-    <h2>Missables &amp; watch list</h2>
-    <p>Only one trophy can be missed, and only possibly. Everything else on this page is a habit that keeps the run safe: saves, timing, and one permanent profile status to avoid.</p>
-  </div>
-  <div class="missables-grid">
-    <section class="missable-hero" id="missable-hero"></section>
-    <section class="watch-list" id="watch-list"></section>
-    <section class="spoiler-safe" id="spoiler-safe"></section>
-  </div>
-</main>
-
-<main id="tab-sources" class="tab-page" hidden>
-  <div class="page-intro">
-    <h2>Sources</h2>
-    <p>Every guide in this app is written in our own words, and every step cites where its facts came from. A source is cited, never copied. Links open only when you follow them; the app itself fetches nothing.</p>
-  </div>
-  <div class="sources-grid">
-    <section class="source-list" id="source-list"></section>
-    <section class="source-matrix" id="source-matrix"></section>
-    <section class="export-card" id="export-card"></section>
-  </div>
-</main>
-
-<footer class="colophon">
-  <p>LEONIDA NIGHTS is an independent fan-made guide. No Rockstar Games logo, artwork or screenshots are used anywhere in this app. Trophy names and descriptions are shown exactly as PlayStation publishes them; every guide is written in our own words for this entry.</p>
-  <p>Method: each step cites the sources it draws on. &ldquo;Unconfirmed&rdquo; means no source has pinned the method down yet; &ldquo;sources disagree&rdquo; means two sources give different versions and both are shown. Counts in the audit strip are computed live from the guide&rsquo;s own data file.</p>
+<footer class="foot">
+  <p>LEONIDA NIGHTS — an unofficial guide. No Rockstar Games logo, artwork or game screenshots. Trophy names and descriptions are shown as PlayStation publishes them; every guide is written in our own words and cites its sources. Works offline: this page loads nothing from the network.</p>
 </footer>
+
 <script type="module" src="app.js"></script>
 </body>
 </html>

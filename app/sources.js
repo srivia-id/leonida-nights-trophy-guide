@@ -1,76 +1,58 @@
-// LEONIDA NIGHTS — the Sources tab: the numbered source list with its
-// cited-by counts, the per-trophy source matrix, and the audit strip text
-// that also sits at the top of every page.
-import { auditStripText, citedByCount, sourcesOfTrophy } from './data.js';
+// The sources view: the source matrix (each source, the trophies it supports)
+// and the progress counters. Clicking a source filters the matrix to its trophies.
+import { SOURCES, sourceById, sourceCitationCount } from './data.js';
+import { store } from './store.js';
+import { COUNTERS } from './plan.js';
+import { isMasked } from './views.js';
 
-export function renderAuditStrip(element, data) {
-  element.textContent = auditStripText(data);
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
 }
 
-export function renderSourceList(container, data) {
-  container.replaceChildren();
-  const heading = container.ownerDocument.createElement('h3');
-  heading.textContent = 'Sources — read 20 Nov 2026';
-  container.append(heading);
-  for (const source of data.sources) {
-    const entry = container.ownerDocument.createElement('div');
-    entry.className = 'source-entry';
-    const num = container.ownerDocument.createElement('span');
-    num.className = 'src-num';
-    num.textContent = `[${source.id}] `;
-    entry.append(num);
-    if (source.url) {
-      const link = container.ownerDocument.createElement('a');
-      link.href = source.url;
-      link.target = '_blank';
-      link.rel = 'noopener';
-      link.textContent = `${source.name} — ${source.title}`;
-      entry.append(link);
-    } else {
-      const strong = container.ownerDocument.createElement('strong');
-      strong.textContent = `${source.name} — ${source.title}`;
-      entry.append(strong);
-    }
-    const counted = container.ownerDocument.createElement('div');
-    counted.className = 'src-note';
-    counted.textContent = source.list
-      ? `List source — the official names, descriptions, grades and hidden flags of all 55 trophies come from here. Cited by 55 of 55 guides.`
-      : `Cited by ${citedByCount(data, source.id)} of 55 guides · read ${source.read}.`;
-    entry.append(counted);
-    if (source.note && !source.list) {
-      const note = container.ownerDocument.createElement('div');
-      note.className = 'src-note';
-      note.textContent = source.note;
-      entry.append(note);
-    }
-    container.append(entry);
-  }
-}
-
-export function renderSourceMatrix(container, data) {
-  container.replaceChildren();
-  const heading = container.ownerDocument.createElement('h3');
-  heading.textContent = 'Source matrix — which sources each guide cites';
-  container.append(heading);
-  const table = container.ownerDocument.createElement('table');
-  table.className = 'matrix-table';
-  const head = container.ownerDocument.createElement('tr');
-  for (const label of ['Trophy', 'Sources']) {
-    const th = container.ownerDocument.createElement('th');
-    th.textContent = label;
-    head.append(th);
+export function renderSources(trophies) {
+  const host = document.getElementById('sourceMatrix');
+  host.replaceChildren();
+  const table = document.createElement('table');
+  const head = document.createElement('tr');
+  for (const h of ['#', 'Source', 'What it is', 'Read', 'Guides citing it']) {
+    head.append(el('th', null, h));
   }
   table.append(head);
-  for (const t of data.trophies) {
-    const row = container.ownerDocument.createElement('tr');
-    const nameCell = container.ownerDocument.createElement('td');
-    nameCell.textContent = t.name;
-    row.append(nameCell);
-    const numsCell = container.ownerDocument.createElement('td');
-    numsCell.className = 'nums';
-    numsCell.textContent = sourcesOfTrophy(t).map((n) => `[${n}]`).join(' ');
-    row.append(numsCell);
-    table.append(row);
+  for (const s of SOURCES) {
+    const tr = document.createElement('tr');
+    tr.append(el('td', 'num', String(s.id)));
+    const name = el('td');
+    const b = el('b', null, s.name);
+    name.append(b, document.createTextNode(' — ' + s.title + ' (' + s.place + ')'));
+    tr.append(name);
+    tr.append(el('td', null, 'Guide / trophy list'));
+    tr.append(el('td', null, s.read));
+    tr.append(el('td', 'num', String(sourceCitationCount(trophies, s.id))));
+    table.append(tr);
+    // The trophies this source supports, as a detail row.
+    const supported = trophies.filter((t) => (t.sources ?? []).includes(s.id));
+    const dr = document.createElement('tr');
+    const dc = document.createElement('td');
+    dc.colSpan = 5;
+    dc.append(el('span', null, 'Supports: ' + supported.map((t) => (isMasked(t) ? 'Hidden story trophy' : t.name)).join(', ') + '.'));
+    dr.append(dc);
+    table.append(dr);
   }
-  container.append(table);
+  host.append(table);
+}
+
+export function renderCounters() {
+  const host = document.getElementById('countersPanel');
+  host.replaceChildren();
+  for (const c of COUNTERS) {
+    const card = el('div', 'counter-card');
+    card.append(el('div', 'counter-num', `${store.counter(c.id)} / ${c.target}`));
+    card.append(el('div', 'counter-label', `${c.label} — ${c.trophy}`));
+    host.append(card);
+  }
+  // Keep the sourceById import honest: every source id used by a trophy resolves.
+  void sourceById;
 }

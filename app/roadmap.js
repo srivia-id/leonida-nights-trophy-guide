@@ -1,45 +1,58 @@
-// LEONIDA NIGHTS — the Roadmap tab: seven stages S1–S7, each with its
-// trophies, its hours, and live earned progress.
-import { kindLabel } from './data.js';
+// The roadmap view: the seven stages S1-S7, each with its trophies and its
+// progress, and the missables view: the watch list plus the hidden trophies.
+import { store } from './store.js';
+import { STAGES, WATCH, stageTrophies } from './plan.js';
+import { isMasked } from './views.js';
 
-export function renderRoadmap(container, data, state) {
-  container.replaceChildren();
-  for (const stage of data.stages) {
-    const members = data.trophies.filter((t) => t.stage === stage.id);
-    const earned = members.filter((t) => state.earned.has(t.id)).length;
-    const card = container.ownerDocument.createElement('article');
-    card.className = 'stage-card';
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
 
-    const title = container.ownerDocument.createElement('h3');
-    title.textContent = `${stage.id} — ${stage.title}`;
-    card.append(title);
-
-    const meta = container.ownerDocument.createElement('p');
-    meta.className = 'stage-meta';
-    meta.textContent = `≈${stage.hours} hours · ${members.length} trophies`;
-    card.append(meta);
-
-    const note = container.ownerDocument.createElement('p');
-    note.className = 'stage-note';
-    note.textContent = stage.note;
-    card.append(note);
-
-    const chips = container.ownerDocument.createElement('div');
-    chips.className = 'stage-trophies';
-    for (const t of members) {
-      const chip = container.ownerDocument.createElement('span');
-      chip.className = 'tag' + (state.earned.has(t.id) ? ' done' : '');
-      chip.textContent = `${t.name} · ${kindLabel(t.kind)}`;
-      chip.title = t.description;
-      chips.append(chip);
+export function renderRoadmap(trophies) {
+  const host = document.getElementById('roadmapStages');
+  host.replaceChildren();
+  for (const stage of STAGES) {
+    const list = stageTrophies(trophies, stage.code);
+    const earned = list.filter((t) => store.earned.has(t.id)).length;
+    const card = el('div', 'stage');
+    const h = el('h3');
+    h.append(el('span', 'stage-code', stage.code + ' — '), document.createTextNode(stage.title));
+    card.append(h);
+    card.append(el('p', null, stage.text));
+    card.append(el('div', 'stage-progress', `${earned} / ${list.length} earned in this stage`));
+    const ul = el('ul');
+    for (const t of list) {
+      const li = el('li', store.earned.has(t.id) ? 'earned' : null, isMasked(t) ? 'Story trophy — hidden on PlayStation until earned' : `${t.name} (${t.grade})`);
+      ul.append(li);
     }
-    card.append(chips);
+    card.append(ul);
+    host.append(card);
+  }
+}
 
-    const progress = container.ownerDocument.createElement('p');
-    progress.className = 'stage-progress';
-    progress.textContent = `${earned}/${members.length} earned in this stage`;
-    card.append(progress);
-
-    container.append(card);
+export function renderMissables(trophies) {
+  const host = document.getElementById('watchList');
+  host.replaceChildren();
+  for (const w of WATCH) {
+    const t = trophies.find((x) => x.id === w.id);
+    if (!t) continue;
+    const card = el('div', 'watch-card' + (w.danger ? ' danger' : ''));
+    card.append(el('div', 'status', w.status));
+    card.append(el('h3', null, isMasked(t) ? 'Story trophy — hidden' : t.name));
+    card.append(el('p', null, '“' + t.description + '”'));
+    card.append(el('p', null, w.reason));
+    if (t.missable) {
+      card.append(el('p', null, 'Sources disagree on the count: PowerPyx lists 18 meditation spots, other guides list 15. This guide targets 18 and says so in the open.'));
+    }
+    host.append(card);
+  }
+  const hiddenHost = document.getElementById('hiddenList');
+  hiddenHost.replaceChildren();
+  for (const t of trophies.filter((x) => x.hidden)) {
+    const cell = el('div', 'hidden-cell' + (store.earned.has(t.id) ? ' earned' : ''), store.earned.has(t.id) || !isMasked(t) ? t.name : 'Hidden trophy — earn to reveal');
+    hiddenHost.append(cell);
   }
 }
